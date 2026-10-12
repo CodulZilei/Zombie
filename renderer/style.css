@@ -1,0 +1,349 @@
+/* Zombie Pet — overlay styles.
+ * The page itself is fully transparent; only the zombies, their slime, and a
+ * small HUD are ever painted. Everything is drawn with styled elements so the
+ * repo needs no binary image assets. */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  cursor: default;
+  font-family: -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+}
+
+#world {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* the real hit-testing is done per-zombie in JS */
+}
+
+/* ------------------------------------------------------------------ *
+ * The zombie
+ * ------------------------------------------------------------------ */
+
+.zombie {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 64px;
+  will-change: transform;
+  /* translate is set from JS; this is just the initial spot */
+  transform: translate3d(0, 0, 0);
+  pointer-events: none;
+}
+
+/* Inner wrapper handles horizontal flip so it never fights the position. */
+.z-flip {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+.zombie.face-left .z-flip {
+  transform: scaleX(-1);
+}
+
+/* Parts. Colours are a sickly undead green. */
+.z-part {
+  position: absolute;
+  background: #6f8f3a;
+  border: 2px solid #33471a;
+  box-sizing: border-box;
+}
+
+.z-body {
+  width: 24px;
+  height: 26px;
+  left: 10px;
+  top: 24px;
+  border-radius: 6px 6px 4px 4px;
+  background: linear-gradient(#78993f, #5e7d32);
+  z-index: 3;
+}
+
+/* Torn shirt detail */
+.z-body::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  height: 7px;
+  background: #4a6327;
+  clip-path: polygon(0 0, 15% 100%, 30% 0, 45% 100%, 60% 0, 75% 100%, 90% 0, 100% 60%, 100% 0);
+}
+
+.z-head {
+  width: 30px;
+  height: 28px;
+  left: 7px;
+  top: 2px;
+  border-radius: 8px 8px 7px 7px;
+  background: linear-gradient(#86a84c, #6f8f3a);
+  z-index: 4;
+}
+
+/* Sunken eyes */
+.z-eye {
+  position: absolute;
+  top: 9px;
+  width: 7px;
+  height: 7px;
+  background: #1a2410;
+  border-radius: 50%;
+  z-index: 5;
+}
+.z-eye::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 3px;
+  height: 3px;
+  background: #d9ff6b;
+  border-radius: 50%;
+}
+.z-eye-l {
+  left: 13px;
+}
+.z-eye-r {
+  left: 24px;
+}
+
+/* Stitched grimace */
+.z-mouth {
+  position: absolute;
+  left: 14px;
+  top: 21px;
+  width: 15px;
+  height: 4px;
+  background: #22160f;
+  border-radius: 0 0 3px 3px;
+  z-index: 5;
+}
+.z-mouth::before,
+.z-mouth::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 7px;
+  background: #22160f;
+}
+.z-mouth::before {
+  left: 4px;
+}
+.z-mouth::after {
+  left: 9px;
+}
+
+.z-arm {
+  width: 8px;
+  height: 22px;
+  top: 26px;
+  border-radius: 4px;
+  background: #6b8a38;
+  transform-origin: 50% 2px;
+}
+.z-arm-back {
+  left: 5px;
+  z-index: 2;
+  background: #5a7430;
+}
+.z-arm-front {
+  left: 31px;
+  z-index: 5;
+}
+
+.z-leg {
+  width: 9px;
+  height: 18px;
+  top: 47px;
+  border-radius: 0 0 3px 3px;
+  background: #556b2d;
+  transform-origin: 50% 1px;
+}
+.z-leg-back {
+  left: 13px;
+  z-index: 1;
+  background: #46581f;
+}
+.z-leg-front {
+  left: 22px;
+  z-index: 2;
+}
+
+/* ---- states ---- */
+
+/* Idle: a slow, creepy sway. */
+.zombie.idle .z-flip {
+  animation: z-sway 2.6s ease-in-out infinite;
+}
+.zombie.idle .z-arm-front {
+  animation: z-reach 2.6s ease-in-out infinite;
+}
+@keyframes z-sway {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+.zombie.face-left.idle .z-flip {
+  animation: z-sway-flip 2.6s ease-in-out infinite;
+}
+@keyframes z-sway-flip {
+  0%, 100% { transform: scaleX(-1) rotate(-2deg); }
+  50% { transform: scaleX(-1) rotate(2deg); }
+}
+@keyframes z-reach {
+  0%, 100% { transform: rotate(-78deg); }
+  50% { transform: rotate(-70deg); }
+}
+
+/* Walk: shambling limbs, arms outstretched. */
+.zombie.walk .z-leg-front {
+  animation: z-step 0.5s ease-in-out infinite;
+}
+.zombie.walk .z-leg-back {
+  animation: z-step 0.5s ease-in-out infinite reverse;
+}
+.zombie.walk .z-arm-front {
+  transform: rotate(-82deg);
+  animation: z-arm-bob 0.5s ease-in-out infinite;
+}
+.zombie.walk .z-arm-back {
+  transform: rotate(-70deg);
+}
+@keyframes z-step {
+  0%, 100% { transform: rotate(22deg); }
+  50% { transform: rotate(-22deg); }
+}
+@keyframes z-arm-bob {
+  0%, 100% { transform: rotate(-82deg) translateY(0); }
+  50% { transform: rotate(-82deg) translateY(-2px); }
+}
+
+/* Airborne / grabbed: arms flail up. */
+.zombie.air .z-arm-front {
+  transform: rotate(-150deg);
+}
+.zombie.air .z-arm-back {
+  transform: rotate(-150deg);
+}
+.zombie.air .z-leg-front {
+  transform: rotate(-18deg);
+}
+.zombie.air .z-leg-back {
+  transform: rotate(18deg);
+}
+.zombie.grabbed {
+  cursor: grabbing;
+}
+
+/* Bite lunge used when it infects a spot. */
+.zombie.bite .z-flip {
+  animation: z-lunge 0.4s ease-out;
+}
+@keyframes z-lunge {
+  0% { transform: translateY(0) rotate(0); }
+  40% { transform: translateY(3px) rotate(10deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+
+/* ------------------------------------------------------------------ *
+ * Infection slime (purely cosmetic, lives only in this overlay)
+ * ------------------------------------------------------------------ */
+
+.slime {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #b6ff57, #6abf1f 55%, #3d7a12 100%);
+  box-shadow: 0 0 10px rgba(120, 255, 60, 0.55);
+  transform: translate(-50%, -50%) scale(0);
+  animation: slime-pop 420ms cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+  z-index: 1;
+}
+@keyframes slime-pop {
+  to { transform: translate(-50%, -50%) scale(1); }
+}
+
+.slime.fading {
+  transition: opacity 1.4s ease, filter 1.4s ease;
+  opacity: 0;
+  filter: blur(2px);
+}
+
+/* Little drip that falls from a fresh splat. */
+.drip {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+  background: #7ed028;
+  pointer-events: none;
+  z-index: 1;
+  animation: drip-fall var(--fall, 900ms) ease-in forwards;
+}
+@keyframes drip-fall {
+  0% { transform: translateY(0) scaleY(1); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(var(--dist, 60px)) scaleY(1.6); opacity: 0; }
+}
+
+/* ------------------------------------------------------------------ *
+ * HUD
+ * ------------------------------------------------------------------ */
+
+.hud {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(16, 24, 10, 0.82);
+  color: #d7f2a6;
+  font-size: 12px;
+  line-height: 1.55;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(150, 220, 90, 0.25);
+  transition: opacity 0.8s ease;
+  max-width: 340px;
+}
+.hud.hidden {
+  opacity: 0;
+}
+.hud-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #b6ff57;
+  margin-bottom: 4px;
+}
+.hud-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.hud-stats b {
+  color: #fff;
+}
+.hud-help {
+  opacity: 0.8;
+  font-size: 11px;
+}
+.hud-help b {
+  color: #cdee90;
+  font-weight: 600;
+}

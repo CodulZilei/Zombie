@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Local overlay: only ever loads its own files, nothing from the network. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+    />
+    <title>Zombie Pet</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Everything the zombies and their slime live in. -->
+    <div id="world"></div>
+
+    <!-- A tiny heads-up display that fades out after a few seconds. -->
+    <div id="hud" class="hud">
+      <div class="hud-title">🧟 Zombie Pet</div>
+      <div class="hud-stats">
+        <span>Zombies: <b id="stat-zombies">0</b></span>
+        <span>Infected: <b id="stat-infected">0</b></span>
+      </div>
+      <div class="hud-help">
+        Drag a zombie to throw it · it chases your cursor and infects spots<br />
+        <b>Ctrl/Cmd+Shift+Z</b> spawn · <b>+Shift+H</b> horde ·
+        <b>+Shift+X</b> clear · <b>+Shift+Q</b> quit
+      </div>
+    </div>
+
+    <script src="zombie.js"></script>
+  </body>
+</html>

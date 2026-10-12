@@ -1,0 +1,22 @@
+{
+  "name": "zombie-pet",
+  "version": "1.0.0",
+  "description": "A desktop zombie pet that roams your screen, follows your cursor, and 'infects' spots with cosmetic slime. Pure overlay eye-candy — it never touches other apps.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": [
+    "desktop-pet",
+    "electron",
+    "shimeji",
+    "overlay",
+    "zombie",
+    "fun"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}
