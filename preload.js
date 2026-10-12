@@ -3,11 +3,11 @@
 /*
  * Minimal, locked-down bridge between the renderer and the main process.
  * The renderer gets exactly three things: a way to toggle mouse capture,
- * a way to subscribe to control commands (spawn/clear), and the primary
- * mouse position for cursor-chasing. Nothing else is exposed.
+ * a way to subscribe to control commands (spawn/clear), and the cursor
+ * position for cursor-chasing. Nothing else is exposed.
  */
 
-const { contextBridge, ipcRenderer, screen } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petAPI', {
   // Ask main to ignore (true) or capture (false) mouse events for this window.
@@ -21,5 +21,10 @@ contextBridge.exposeInMainWorld('petAPI', {
   },
   onClear(cb) {
     ipcRenderer.on('clear', () => cb());
+  },
+
+  // Cursor position relative to this overlay: { x, y, inside }.
+  onCursor(cb) {
+    ipcRenderer.on('cursor', (_e, p) => cb({ x: +p.x, y: +p.y, inside: !!p.inside }));
   }
 });

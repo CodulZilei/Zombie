@@ -16,9 +16,10 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, screen, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 
-/** @type {BrowserWindow[]} */
-let windows = [];
+/** One overlay per display, keyed by display id. @type {Map<number, BrowserWindow>} */
+const windows = new Map();
 let tray = null;
+let cursorTimer = null;
 
 // A single CPU-cheap tray icon (16x16 lime circle) encoded inline so we need
 // no binary asset in the repo. Tray is optional; it is skipped if unsupported.
@@ -71,21 +72,67 @@ function createWindowForDisplay(display) {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.on('closed', () => {
-    windows = windows.filter((w) => w !== win);
+    if (windows.get(display.id) === win) windows.delete(display.id);
   });
 
   return win;
 }
 
-function createAllWindows() {
-  windows.forEach((w) => w.destroy());
-  windows = screen.getAllDisplays().map(createWindowForDisplay);
+// Bring the set of overlays in line with the current monitor layout. Existing
+// overlays are only resized (so their zombies survive), new displays get a
+// fresh overlay, and overlays for unplugged displays are closed last, so there
+// is never a moment with zero windows.
+function syncWindows() {
+  const displays = screen.getAllDisplays();
+  const live = new Set(displays.map((d) => d.id));
+
+  for (const display of displays) {
+    const win = windows.get(display.id);
+    if (win && !win.isDestroyed()) win.setBounds(display.bounds);
+    else windows.set(display.id, createWindowForDisplay(display));
+  }
+
+  for (const [id, win] of windows) {
+    if (!live.has(id)) {
+      windows.delete(id);
+      if (!win.isDestroyed()) win.destroy();
+    }
+  }
+}
+
+function send(win, channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
 function broadcast(channel, payload) {
-  windows.forEach((w) => {
-    if (!w.isDestroyed()) w.webContents.send(channel, payload);
-  });
+  windows.forEach((w) => send(w, channel, payload));
+}
+
+// Spawn on the screen you are looking at, not one zombie per monitor.
+function sendToCursorDisplay(channel, payload) {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  send(windows.get(display.id), channel, payload);
+}
+
+// Forwarded mousemove events only reach a click-through window on some
+// platforms (and never while the cursor is over another monitor), so also feed
+// each overlay the cursor position directly. This only reads where the pointer
+// is; it never touches anything underneath it.
+function startCursorFeed() {
+  let lastX = NaN;
+  let lastY = NaN;
+  cursorTimer = setInterval(() => {
+    const p = screen.getCursorScreenPoint();
+    if (p.x === lastX && p.y === lastY) return;
+    lastX = p.x;
+    lastY = p.y;
+    windows.forEach((win) => {
+      if (win.isDestroyed()) return;
+      const b = win.getBounds();
+      const inside = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
+      send(win, 'cursor', { x: p.x - b.x, y: p.y - b.y, inside });
+    });
+  }, 33);
 }
 
 function buildTray() {
@@ -96,8 +143,8 @@ function buildTray() {
     tray.setToolTip('Zombie Pet');
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: 'Spawn a zombie', click: () => broadcast('spawn', 1) },
-        { label: 'Spawn a horde (+5)', click: () => broadcast('spawn', 5) },
+        { label: 'Spawn a zombie', click: () => sendToCursorDisplay('spawn', 1) },
+        { label: 'Spawn a horde (+5)', click: () => sendToCursorDisplay('spawn', 5) },
         { label: 'Clear infections', click: () => broadcast('clear') },
         { type: 'separator' },
         { label: 'Quit', click: () => app.quit() }
@@ -111,8 +158,8 @@ function buildTray() {
 
 function registerShortcuts() {
   // These are the controls, since the overlay itself is click-through.
-  globalShortcut.register('CommandOrControl+Shift+Z', () => broadcast('spawn', 1));
-  globalShortcut.register('CommandOrControl+Shift+H', () => broadcast('spawn', 5));
+  globalShortcut.register('CommandOrControl+Shift+Z', () => sendToCursorDisplay('spawn', 1));
+  globalShortcut.register('CommandOrControl+Shift+H', () => sendToCursorDisplay('spawn', 5));
   globalShortcut.register('CommandOrControl+Shift+X', () => broadcast('clear'));
   globalShortcut.register('CommandOrControl+Shift+Q', () => app.quit());
 }
@@ -130,23 +177,24 @@ app.whenReady().then(() => {
   // On macOS, keep it a background accessory (no dock icon).
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
-  createAllWindows();
+  syncWindows();
   buildTray();
   registerShortcuts();
+  startCursorFeed();
 
-  // Recreate overlays when the monitor layout changes.
-  screen.on('display-added', createAllWindows);
-  screen.on('display-removed', createAllWindows);
-  screen.on('display-metrics-changed', createAllWindows);
+  // Follow the monitor layout without wiping the zombies already on screen.
+  screen.on('display-added', syncWindows);
+  screen.on('display-removed', syncWindows);
+  screen.on('display-metrics-changed', syncWindows);
 
-  app.on('activate', () => {
-    if (windows.length === 0) createAllWindows();
-  });
+  app.on('activate', syncWindows);
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
-
-// This is an overlay toy: keep running even with no "normal" windows.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on('will-quit', () => {
+  clearInterval(cursorTimer);
+  globalShortcut.unregisterAll();
 });
+
+// This is an overlay toy: keep running even if every overlay is gone (e.g. all
+// monitors briefly unplugged). Quit from the tray or with Ctrl/Cmd+Shift+Q.
+app.on('window-all-closed', () => {});

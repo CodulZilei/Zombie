@@ -16,7 +16,10 @@
     "fun"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
   "devDependencies": {
-    "electron": "^31.7.7"
+    "electron": "^44.4.5"
   }
 }

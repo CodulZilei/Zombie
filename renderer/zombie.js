@@ -50,7 +50,7 @@
   class Zombie {
     constructor(x, y) {
       this.x = clamp(x, 0, maxX());
-      this.y = clamp(y, 0, groundY());
+      this.y = clamp(y, -ZH * 4, groundY()); // may start above the screen and drop in
       this.vx = 0;
       this.vy = 0;
       this.facing = Math.random() < 0.5 ? 1 : -1;
@@ -166,7 +166,10 @@
       } else {
         this.grounded = false;
       }
-      this.y = clamp(this.y, 0, g);
+
+      // Ceiling — a hard upward throw stops at the top edge and falls back
+      // down. Zombies dropping in from above (moving down) pass through.
+      if (this.y < 0 && this.vy < 0) { this.y = 0; this.vy = 0; }
 
       this._render(this.grounded ? (this.walking ? 'walk' : 'idle') : 'air');
     }
@@ -320,12 +323,16 @@
     cursor.y = e.clientY;
     cursor.known = true;
 
+    // The button came up somewhere we never heard about (e.g. on another
+    // monitor): drop the zombie instead of leaving it stuck to the cursor.
+    if (grabbed && !(e.buttons & 1)) release();
+
     if (grabbed) {
       grabbed.x = clamp(e.clientX - ZW / 2, 0, maxX());
       grabbed.y = clamp(e.clientY - ZH / 2, 0, groundY());
       grabbed.grounded = false;
       samples.push({ t: performance.now(), x: grabbed.x, y: grabbed.y });
-      if (samples.length > 6) samples.shift();
+      if (samples.length > 12) samples.shift();
       return; // keep capturing while held
     }
 
@@ -346,22 +353,28 @@
     e.preventDefault();
   });
 
-  window.addEventListener('mouseup', () => {
+  function release() {
     if (!grabbed) return;
     const z = grabbed;
     z.el.classList.remove('grabbed');
-    // throw velocity from the last ~100 ms of movement
-    if (samples.length >= 2) {
-      const a = samples[0];
-      const b = samples[samples.length - 1];
-      const dt = Math.max((b.t - a.t) / 1000, 0.001);
+    // Throw velocity from the last ~100 ms of movement only, so holding the
+    // zombie still before letting go just drops it.
+    const now = performance.now();
+    const recent = samples.filter((s) => now - s.t <= 100);
+    if (recent.length >= 2) {
+      const a = recent[0];
+      const b = recent[recent.length - 1];
+      const dt = Math.max((b.t - a.t) / 1000, 0.016);
       z.vx = clamp((b.x - a.x) / dt, -1600, 1600);
       z.vy = clamp((b.y - a.y) / dt, -1600, 1600);
     }
+    samples.length = 0;
     grabbed = null;
     // re-evaluate hover at the release point
     setCapture(!!zombieAt(cursor.x, cursor.y));
-  });
+  }
+
+  window.addEventListener('mouseup', release);
 
   // If the pointer leaves the window entirely, stop capturing.
   window.addEventListener('mouseout', (e) => {
@@ -374,13 +387,28 @@
   if (window.petAPI) {
     window.petAPI.onSpawn((n) => spawnMany(n));
     window.petAPI.onClear(() => clearInfections());
+
+    // Cursor position polled by the main process. Click-through windows don't
+    // get forwarded mousemove on every platform (notably Linux), so this is
+    // what keeps cursor-chasing and grab-on-hover working everywhere.
+    window.petAPI.onCursor((p) => {
+      if (!p.inside) {
+        cursor.known = false;          // it's on another monitor
+        if (!grabbed) setCapture(false);
+        return;
+      }
+      cursor.x = p.x;
+      cursor.y = p.y;
+      cursor.known = true;               // the frame loop handles hover capture
+    });
   }
 
-  // Double-click empty space to drop a zombie right there (handy on Linux
-  // where tray/shortcuts may be unavailable). Only fires while capturing,
-  // which means the cursor was over a zombie — so use a keyboard-free hop.
+  // Double-click a zombie to spawn another one beside it (handy on Linux
+  // where tray/shortcuts may be unavailable). Empty space can't be
+  // double-clicked: those clicks pass through to the app underneath.
   window.addEventListener('dblclick', (e) => {
-    addZombie(e.clientX - ZW / 2, groundY());
+    const side = pick([-1, 1]);
+    addZombie(e.clientX - ZW / 2 + side * ZW, e.clientY - ZH);
   });
 
   // Keep things sane across resolution / workspace changes.
@@ -400,6 +428,9 @@
     last = now;
     if (dt > 0.05) dt = 0.05; // avoid huge steps after a stall
     for (const z of zombies) z.update(dt);
+    // Zombies wander under (and out from under) a cursor that isn't moving, so
+    // keep click-through in step every frame, not just on mouse movement.
+    if (!grabbed && cursor.known) setCapture(!!zombieAt(cursor.x, cursor.y));
     reapSlime(now);
     requestAnimationFrame(frame);
   }
